@@ -259,6 +259,48 @@
   .vf-save-btn:hover:not(:disabled) { background:#1d4ed8; }
   .vf-save-btn:disabled { opacity:.5; cursor:not-allowed; }
   .vf-saved { background:var(--green-light); border:1px solid #a7f3d0; border-radius:8px; padding:10px 14px; font-size:13px; color:var(--green); font-weight:600; text-align:center; }
+
+  /* MINUTA / PRINT */
+  @media print {
+    .sidebar, .nav, .sidebar-footer, #floatingWBR,
+    .btn, .filter-bar, .tabs, .page-header p,
+    #dashFechaInicio, #dashFechaFin { display: none !important; }
+    .main { margin-left: 0 !important; padding: 0 !important; }
+    .page { display: block !important; }
+    .page:not(#page-minuta) { display: none !important; }
+    body { background: #fff; }
+    .minuta-header { border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 20px; }
+  }
+  /* MINUTA MODAL */
+  .minuta-overlay {
+    position:fixed;inset:0;background:rgba(15,23,42,.5);
+    z-index:300;display:none;align-items:flex-start;justify-content:center;
+    overflow-y:auto;padding:32px 16px;
+  }
+  .minuta-overlay.open { display:flex; }
+  .minuta-doc {
+    background:#fff;border-radius:12px;width:760px;max-width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,.2);
+  }
+  .minuta-toolbar {
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 20px;border-bottom:1px solid var(--border);
+    background:var(--surface2);border-radius:12px 12px 0 0;
+  }
+  .minuta-body { padding:32px 40px; }
+  .minuta-logo { font-family:"Syne",sans-serif;font-size:22px;font-weight:800;color:var(--accent); }
+  .minuta-meta { color:var(--text2);font-size:13px;margin-top:4px; }
+  .minuta-section { margin-top:24px; }
+  .minuta-section-title {
+    font-family:"Syne",sans-serif;font-size:13px;font-weight:700;
+    text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+    border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:12px;
+  }
+  .minuta-vendedor { margin-bottom:20px;padding:14px;border:1px solid var(--border);border-radius:8px; }
+  .minuta-vendedor-name { font-weight:700;font-size:15px;margin-bottom:8px; }
+  .minuta-kpi-row { display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f0f2f6; }
+  .minuta-desc { font-size:13px;color:var(--text2);margin:8px 0;padding:8px;background:var(--surface2);border-radius:6px; }
+  .minuta-accion { font-size:12px;padding:6px 10px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;gap:8px;align-items:flex-start; }
 </style>
 </head>
 <body>
@@ -435,6 +477,18 @@
 
 
 
+
+<!-- FLOATING WBR BUTTON -->
+<div id="floatingWBR" style="display:none;position:fixed;bottom:24px;right:24px;z-index:150">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;box-shadow:var(--shadow-md);min-width:220px">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Sesión activa</div>
+    <div id="floatingSesionInfo" style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="volverASesion()" style="flex:1">↩ Continuar</button>
+      <button class="btn btn-sm" onclick="concluirWBR()" style="flex:1;background:#dc2626;color:#fff">✓ Concluir</button>
+    </div>
+  </div>
+</div>
 </main>
 
 <!-- MODAL NUEVA ACCIÓN -->
@@ -579,11 +633,11 @@ function getWeek() {
 // ── LOAD ───────────────────────────────────────────────────────
 async function loadAll() {
   try {
-    const [equipo,kpis,clasificaciones,calificaciones,acciones,seguimiento] = await Promise.all([
+    const [equipo,kpis,clasificaciones,calificaciones,acciones,seguimiento,descubrimientos] = await Promise.all([
       api('getEquipo'),api('getKPIs'),api('getClasificaciones'),
-      api('getCalificaciones'),api('getPlanAcciones'),api('getSeguimiento')
+      api('getCalificaciones'),api('getPlanAcciones'),api('getSeguimiento'),api('getDescubrimientos')
     ]);
-    state = {equipo,kpis,clasificaciones,calificaciones,acciones,seguimiento};
+    state = {equipo,kpis,clasificaciones,calificaciones,acciones,seguimiento,descubrimientos};
     const coord = equipo.find(e=>e.Rol==='Coordinador');
     if (coord) {
       document.getElementById('coordName').textContent = coord.Nombre.split(' ').slice(0,2).join(' ');
@@ -591,6 +645,9 @@ async function loadAll() {
     }
     populateSelects();
     renderDashboard();
+    // Restore floating button if session was active
+    const savedSes = localStorage.getItem('wbr_sesion_activa');
+    if (savedSes) { try { sesionActiva = JSON.parse(savedSes); showFloatingBtn(); } catch(e) {} }
   } catch(e) { toast('Error al conectar con Google Sheets','error'); }
 }
 
@@ -770,6 +827,7 @@ function renderHistorial() {
         return `<td>${p !== undefined ? pctPill(p) : '<span style="color:var(--muted);font-size:12px">—</span>'}</td>`;
       }).join('')}
       <td>${prom !== null ? pctPill(prom) : '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="abrirMinuta('${ses.id}')">📄 Minuta</button></td>
     </tr>`;
   }).join('');
 
@@ -783,6 +841,7 @@ function renderHistorial() {
             <th>Semana</th>
             ${vends.map(v=>`<th>${v.split(' ')[0]}</th>`).join('')}
             <th>Promedio</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -795,6 +854,25 @@ function renderHistorial() {
 
 // ── CALIFICAR ──────────────────────────────────────────────────
 function resetCalificar() {
+  // Check localStorage for active session
+  const saved = localStorage.getItem('wbr_sesion_activa');
+  if (saved) {
+    try {
+      sesionActiva = JSON.parse(saved);
+      document.getElementById('stepNum1').classList.add('done');
+      document.getElementById('sesionInfo').textContent = `Sesión: ${sesionActiva.id} · ${sesionActiva.semana} · ${fmtDate(sesionActiva.fecha)}`;
+      document.getElementById('sesionId').value    = sesionActiva.id;
+      document.getElementById('sesionFecha').value = sesionActiva.fecha;
+      document.getElementById('sesionSemana').value = sesionActiva.semana;
+      document.getElementById('paso2').style.display = 'block';
+      renderVendedores();
+      // Reset tabs to nueva sesion
+      document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
+      document.querySelectorAll('.tab-content').forEach((t,i)=>t.classList.toggle('active',i===0));
+      return;
+    } catch(e) { localStorage.removeItem('wbr_sesion_activa'); }
+  }
+
   sesionActiva = null;
   document.getElementById('paso2').style.display = 'none';
   document.getElementById('stepNum1').classList.remove('done');
@@ -805,12 +883,10 @@ function resetCalificar() {
   const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
   document.getElementById('sesionId').value = 'SES' + String(nextNum).padStart(3,'0');
 
-  // Set today and auto-calculate week
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('sesionFecha').value  = today;
   document.getElementById('sesionSemana').value = calcSemana(today);
 
-  // Reset tabs
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
   document.querySelectorAll('.tab-content').forEach((t,i)=>t.classList.toggle('active',i===0));
 }
@@ -828,10 +904,35 @@ function crearSesion() {
   const semana=document.getElementById('sesionSemana').value.trim();
   if (!id||!fecha||!semana) { toast('Completa todos los campos','error'); return; }
   sesionActiva={id,fecha,semana};
+  localStorage.setItem('wbr_sesion_activa', JSON.stringify(sesionActiva));
   document.getElementById('stepNum1').classList.add('done');
   document.getElementById('sesionInfo').textContent=`Sesión: ${id} · ${semana} · ${fmtDate(fecha)}`;
   document.getElementById('paso2').style.display='block';
   renderVendedores();
+  showFloatingBtn();
+}
+
+function showFloatingBtn() {
+  if (!sesionActiva) return;
+  document.getElementById('floatingWBR').style.display = 'block';
+  document.getElementById('floatingSesionInfo').textContent = `${sesionActiva.id} · ${sesionActiva.semana}`;
+}
+
+function volverASesion() {
+  // Navigate to calificar page
+  const navItem = document.querySelector('.nav-item[onclick*="calificar"]');
+  if (navItem) navItem.click();
+}
+
+function concluirWBR() {
+  if (!confirm(`¿Confirmas que la WBR ${sesionActiva?.id} ha concluido?`)) return;
+  localStorage.removeItem('wbr_sesion_activa');
+  sesionActiva = null;
+  document.getElementById('floatingWBR').style.display = 'none';
+  toast('✅ WBR concluida y cerrada');
+  // Reset calificar page
+  document.getElementById('paso2').style.display = 'none';
+  document.getElementById('stepNum1').classList.remove('done');
 }
 
 // Tumba burros texts
@@ -1106,7 +1207,96 @@ async function guardarAccionesVendedor(vid, vendedor) {
     `<div class="vf-saved">✅ ${vendedor} completado — ${saved} acción(es) guardada(s)</div>`;
 
   toast(`✅ ${vendedor} finalizado`);
-  await loadAll();
+  await 
+// ── MINUTA ─────────────────────────────────────────────────────
+function abrirMinuta(sesionId) {
+  const { calificaciones, acciones, equipo } = state;
+  const descs = state.descubrimientos || [];
+
+  const sesCalifs = calificaciones.filter(c => c.ID_Sesion === sesionId);
+  const sesAcciones = acciones.filter(a => a.ID_Sesion === sesionId);
+  const sesDescs = descs.filter(d => d.ID_Sesion === sesionId);
+
+  if (!sesCalifs.length && !sesAcciones.length) {
+    toast('No hay datos para esta sesión', 'error'); return;
+  }
+
+  const fecha = sesCalifs[0]?.Fecha || '';
+  const semana = sesCalifs[0]?.Semana || '';
+  const vends = equipo.filter(e => e.Rol !== 'Coordinador');
+
+  const vendedoresHtml = vends.map(v => {
+    const cal = sesCalifs.find(c => c.Vendedor === v.Nombre);
+    const desc = sesDescs.find(d => d.Vendedor === v.Nombre);
+    const acts = sesAcciones.filter(a => a.Vendedor === v.Nombre);
+
+    if (!cal && !desc && !acts.length) return '';
+
+    // KPIs
+    const kpiCols = cal ? Object.entries(cal)
+      .filter(([k]) => k.startsWith('KPI_'))
+      .map(([k, v]) => `<div class="minuta-kpi-row"><span>${k.replace('KPI_','KPI ')}</span><span>${v}</span></div>`).join('') : '';
+
+    const pctVal = cal ? pctPill(cal['% Cumplimiento']) : '';
+
+    // Acciones
+    const actsHtml = acts.map(a => `
+      <div class="minuta-accion">
+        ${badgeClasif(a.Clasificacion)} ${badgePrio(a.Prioridad)}
+        <div style="flex:1">
+          <strong>${a.Descripcion}</strong>
+          ${a.Descripcion_Libre ? `<div style="color:var(--text2)">${a.Descripcion_Libre}</div>` : ''}
+          <div style="color:var(--muted);font-size:11px;margin-top:2px">
+            Cliente: ${a.Cliente||'—'} · Acomp: ${a['Acompañamiento']||'—'} 
+            ${a.Proveedor_Externo ? `· Proveedor: ${a.Proveedor_Externo}` : ''}
+            · Compromiso: ${fmtDate(a.Fecha_Compromiso)}
+          </div>
+        </div>
+        ${badgeEst(a.Estatus)}
+      </div>`).join('');
+
+    return `
+      <div class="minuta-vendedor">
+        <div class="minuta-vendedor-name">${v.Nombre} <span style="font-size:12px;font-weight:400;color:var(--muted)">${v.Rol}</span> ${pctVal}</div>
+        ${kpiCols ? `<div style="margin-bottom:8px">${kpiCols}</div>` : ''}
+        ${desc ? `<div class="minuta-desc"><strong>Descubrimiento:</strong> ${desc.Descubrimiento}</div>` : ''}
+        ${actsHtml ? `<div style="margin-top:8px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Acciones</div>${actsHtml}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  document.getElementById('minutaBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
+      <div>
+        <div class="minuta-logo">WBR Portal</div>
+        <div class="minuta-meta">Minuta de Reunión Semanal de Negocios</div>
+      </div>
+      <div style="text-align:right;font-size:13px;color:var(--text2)">
+        <div><strong>Sesión:</strong> ${sesionId}</div>
+        <div><strong>Fecha:</strong> ${fmtDate(fecha)}</div>
+        <div><strong>Período:</strong> ${semana}</div>
+        <div><strong>Coordinador:</strong> ${COORD}</div>
+      </div>
+    </div>
+    <div class="minuta-section">
+      <div class="minuta-section-title">Evaluación del Equipo</div>
+      ${vendedoresHtml || '<p style="color:var(--muted);font-size:13px">Sin datos registrados</p>'}
+    </div>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);text-align:center">
+      Generado por WBR Portal · ${new Date().toLocaleDateString('es-MX')}
+    </div>`;
+
+  document.getElementById('minutaOverlay').classList.add('open');
+}
+
+function cerrarMinuta() {
+  document.getElementById('minutaOverlay').classList.remove('open');
+}
+
+function imprimirMinuta() {
+  window.print();
+}
+
+loadAll();
 
   // Auto-close and open next
   setTimeout(() => {
@@ -1476,5 +1666,19 @@ async function guardarSeguimiento() {
 
 loadAll();
 </script>
+
+<!-- MINUTA OVERLAY -->
+<div class="minuta-overlay" id="minutaOverlay">
+  <div class="minuta-doc">
+    <div class="minuta-toolbar">
+      <div style="font-size:14px;font-weight:600">📄 Minuta WBR</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="imprimirMinuta()">🖨️ Imprimir / PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="cerrarMinuta()">✕ Cerrar</button>
+      </div>
+    </div>
+    <div class="minuta-body" id="minutaBody"></div>
+  </div>
+</div>
 </body>
 </html>
