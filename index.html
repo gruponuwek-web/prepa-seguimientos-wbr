@@ -1212,6 +1212,14 @@ async function guardarAccionesVendedor(vid, vendedor) {
 function abrirMinuta(sesionId) {
   const { calificaciones, acciones, equipo } = state;
   const descs = state.descubrimientos || [];
+  // Force open overlay first so user sees something
+  document.getElementById('minutaOverlay').classList.add('open');
+  document.getElementById('minutaBody').innerHTML = '<div class="loading" style="padding:40px"><div class="spinner"></div> Generando minuta...</div>';
+  // Small timeout to let render happen
+  setTimeout(() => _buildMinuta(sesionId, calificaciones, acciones, equipo, descs), 100);
+}
+
+function _buildMinuta(sesionId, calificaciones, acciones, equipo, descs) {
 
   const sesCalifs = calificaciones.filter(c => c.ID_Sesion === sesionId);
   const sesAcciones = acciones.filter(a => a.ID_Sesion === sesionId);
@@ -1285,7 +1293,6 @@ function abrirMinuta(sesionId) {
       Generado por WBR Portal · ${new Date().toLocaleDateString('es-MX')}
     </div>`;
 
-  document.getElementById('minutaOverlay').classList.add('open');
 }
 
 function cerrarMinuta() {
@@ -1637,11 +1644,21 @@ function openSeguimientoModal(idAccion) {
     : `<div style="font-size:12px;color:var(--muted);padding:4px 0;font-style:italic">Sin seguimientos registrados aún</div>`;
 
   document.getElementById('seguimientoAccionInfo').innerHTML = `
-    <div style="font-weight:600;margin-bottom:2px">${a.Vendedor}</div>
-    <div style="color:var(--text2);font-size:12px;margin-bottom:6px">${a.Descripcion}</div>
-    <div style="display:flex;gap:5px;margin-bottom:10px">${badgeClasif(a.Clasificacion)} ${badgeEst(a.Estatus)}</div>
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px">${a.Vendedor}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+      ${badgeClasif(a.Clasificacion)} ${badgePrio(a.Prioridad)} ${badgeEst(a.Estatus)}
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Acción</div>
+      <div style="font-size:13px;font-weight:500">${a.Descripcion}</div>
+      ${a.Descripcion_Libre ? `<div style="font-size:12px;color:var(--text2);margin-top:4px">${a.Descripcion_Libre}</div>` : ''}
+      ${a.Resultado_Esperado ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Resultado esperado: <strong>${a.Resultado_Esperado}</strong></div>` : ''}
+      ${a.Cliente ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Cliente: <strong>${a.Cliente}</strong></div>` : ''}
+      ${a.Proveedor_Externo ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Proveedor externo: <strong>${a.Proveedor_Externo}</strong></div>` : ''}
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">Compromiso: <strong>${fmtDate(a.Fecha_Compromiso)}</strong></div>
+    </div>
     <div style="border-top:1px solid var(--border);padding-top:8px">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Historial</div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Historial de seguimientos</div>
       ${histHtml}
     </div>`;
 
